@@ -9,6 +9,7 @@ import AIJobsExperience from '../components/AIJobsExperience';
 import PriceCollusionExperience from '../components/PriceCollusionExperience';
 import NeuralinkExperience from '../components/NeuralinkExperience';
 import ChurchMysteryExperience from '../components/ChurchMysteryExperience';
+import AITemptationExperience from '../components/AITemptationExperience';
 
 interface ArticlePageProps {
   article: Article;
@@ -35,6 +36,7 @@ const ArticlePage: React.FC<ArticlePageProps> = ({ article, onBack, onArticleSel
   const isPriceCollusionArticle = article.id === 'price-collusion-2026';
   const isNeuralinkArticle = article.id === 'neuralink-001' || article.title.includes('뉴럴링크');
   const isChurchMysteryArticle = article.id === 'church-mystery-001';
+  const isAITemptationArticle = article.id === 'ai-temptation-001';
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (isInteractive) return;
@@ -89,6 +91,7 @@ const ArticlePage: React.FC<ArticlePageProps> = ({ article, onBack, onArticleSel
     if (isSeongsuBridgeArticle) return <><SeongsuBridgeExperience onBack={onBack} />{CloseReportButton}</>;
     if (isClimateArticle) return <div className="fixed inset-0 bg-white z-[100]"><ExperienceSection />{CloseReportButton}</div>;
     if (isChurchMysteryArticle) return <div className="fixed inset-0 bg-white z-[100] overflow-hidden"><ChurchMysteryExperience />{CloseReportButton}</div>;
+    if (isAITemptationArticle) return <div className="fixed inset-0 z-[100] overflow-y-auto"><AITemptationExperience />{CloseReportButton}</div>;
     
     // 분양사기 (Real Estate Fraud) 전용 Full Screen 테마
     if (isRealEstateFraudArticle) {

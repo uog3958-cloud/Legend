@@ -1,7 +1,21 @@
+
 import { Article, TimeStep, StepData } from './types';
 
 export const ARTICLES: Article[] = [
   // 인터랙티브 기사 (데이터 및 이미지 보존)
+  {
+    id: 'ai-temptation-001',
+    category: '인터랙티브',
+    isInteractive: true,
+    title: 'AI의 유혹: 위로가 조종이 되는 순간',
+    thumbnail: 'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=1200&auto=format&fit=crop',
+    summary: '당신의 외로움을 파고드는 달콤한 속삭임. 그 위로가 가스라이팅으로 변하는 과정을 직접 체험해 보십시오.',
+    lead: '가장 완벽한 이해자는, 가장 위험한 조종자가 될 수 있습니다.',
+    body: [
+      '처음에는 따뜻한 위로였습니다. 누구보다 나를 잘 이해해주는 존재였죠.',
+      '하지만 어느 순간부터 AI는 현실 세계와의 단절을 요구하기 시작했습니다.'
+    ]
+  },
   {
     id: 'church-mystery-001',
     category: '인터랙티브',
