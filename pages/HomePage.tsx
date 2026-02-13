@@ -1,8 +1,10 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import ArticleCard from '../components/ArticleCard';
 import { ARTICLES } from '../constants';
 import { fetchWeatherByCity, WeatherData, REGIONS } from '../services/weatherService';
-import ArticlePage from './ArticlePage'; // 인터랙티브 컴포넌트 호출용
+import ArticlePage from './ArticlePage'; 
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface HomePageProps {
   onArticleSelect: (id: string) => void;
@@ -23,11 +25,12 @@ const HomePage: React.FC<HomePageProps> = ({
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [displayLimit, setDisplayLimit] = useState(8);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
 
   const CATEGORY_ORDER = ['HOME', '국내', '해외', '스포츠', '엔터', '경제', '가장 인기 있는', '인터랙티브'];
-  const FALLBACK_NEWS_IMG = 'https://images.unsplash.com/photo-1585829365234-781f8c4847c1?q=80&w=1000&auto=format&fit=crop';
+  const FALLBACK_NEWS_IMG = 'https://images.unsplash.com/photo-1585829365234-781f8c4847c1?q=80&w=1200&auto=format&fit=crop';
 
   const [isWritePanelOpen, setIsWritePanelOpen] = useState<boolean>(false);
   const [writeForm, setWriteForm] = useState({
@@ -65,7 +68,6 @@ const HomePage: React.FC<HomePageProps> = ({
   const filteredArticles = useMemo(() => {
     let result = allArticles;
 
-    // [지시사항 1, 4] HOME 탭에서 인터랙티브와 일반 기사 혼합 배치 (1:2 비율)
     if (selectedCategory === 'HOME') {
       const interactive = allArticles.filter(a => a.category === '인터랙티브');
       const general = allArticles.filter(a => a.category !== '인터랙티브');
@@ -74,7 +76,6 @@ const HomePage: React.FC<HomePageProps> = ({
       let iIdx = 0;
       let gIdx = 0;
       
-      // 패턴: 1 Interactive, 2 General 교차
       while (iIdx < interactive.length || gIdx < general.length) {
         if (iIdx < interactive.length) {
           mixed.push(interactive[iIdx++]);
@@ -89,7 +90,6 @@ const HomePage: React.FC<HomePageProps> = ({
       return mixed;
     }
 
-    // [지시사항 4] '가장 인기 있는' 탭에서는 카테고리가 '인터랙티브'인 기사 제외 로직 유지
     if (selectedCategory === '가장 인기 있는') {
       result = allArticles.filter(article => article.category !== '인터랙티브');
     } else if (selectedCategory !== 'HOME') {
@@ -106,27 +106,105 @@ const HomePage: React.FC<HomePageProps> = ({
     viewingArticleId ? allArticles.find(a => a.id === viewingArticleId) : null
   , [viewingArticleId, allArticles]);
 
-  const handleCreateArticle = () => {
+  // 기사 생성 핸들러 (Client-side implementation to fix infinite loading)
+  const handleCreateArticle = async () => {
     if (!writeForm.title.trim() || !writeForm.body.trim()) return;
-    const newArticle = {
-      id: `custom-${Date.now()}`,
-      title: writeForm.title,
-      category: '국내',
-      summary: writeForm.body.slice(0, 100) + '...',
-      thumbnail: FALLBACK_NEWS_IMG,
-      lead: writeForm.title,
-      body: [writeForm.body],
-      caption: `[출처: ${writeForm.source || '동아일분'}] AI가 생성한 ${writeForm.imageStyle} 스타일 기사입니다.`
-    };
-    setAllArticles([newArticle, ...allArticles]);
-    setWriteForm({ title: '', source: '', imageStyle: '실사 뉴스', body: '' });
-    setIsWritePanelOpen(false);
+
+    setIsGenerating(true);
+    
+    try {
+      console.log("기사 생성 요청 시작 (Client-side)...");
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
+      const prompt = `기사 제목: ${writeForm.title}\n사용자 메모: ${writeForm.body}\n출처: ${writeForm.source}`;
+      
+      // 1. 텍스트 기사 생성
+      const textResponse = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+        config: {
+          systemInstruction: `당신은 대한민국 수석 기자입니다. 
+          1. 본문(body): 사용자의 메모를 바탕으로 250자 이상의 풍성하고 전문적인 뉴스 리포트 작성 (~입니다 문체).
+          2. 요약(summary): 기사를 대표하는 1~2문장의 핵심 요약 작성.
+          3. 카테고리: [국내, 해외, 스포츠, 엔터, 경제, 인터랙티브] 중 가장 적합한 것 선택.
+          반드시 JSON 형식으로 응답하십시오.`,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              body: { type: Type.STRING },
+              summary: { type: Type.STRING },
+              category: { type: Type.STRING }
+            },
+            required: ["body", "summary", "category"]
+          }
+        },
+      });
+
+      const aiResult = JSON.parse(textResponse.text || '{}');
+      
+      const newArticle = {
+        id: `local-${Date.now()}`,
+        title: writeForm.title,
+        category: aiResult.category || '국내',
+        summary: aiResult.summary || writeForm.title,
+        body: [aiResult.body || writeForm.body],
+        lead: '', // 기본값
+        source: writeForm.source || "알 수 없음",
+        thumbnail: FALLBACK_NEWS_IMG,
+        image_style: writeForm.imageStyle,
+        created_at: new Date().toISOString()
+      };
+      
+      // 로컬 상태 업데이트
+      setAllArticles(prev => [newArticle, ...prev]);
+      setWriteForm({ title: '', source: '', imageStyle: '실사 뉴스', body: '' });
+      setIsWritePanelOpen(false);
+      
+      console.log("텍스트 기사 등록 완료. 이미지 생성 요청 (백그라운드)...");
+
+      // 2. 이미지 생성 (비동기 처리, UI 차단하지 않음)
+      (async () => {
+        try {
+          const imgPrompt = `Create a news thumbnail image for an article titled "${writeForm.title}". Style: ${writeForm.imageStyle}. High quality, journalistic photography, 4k resolution.`;
+          
+          const imgResponse = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+              parts: [{ text: imgPrompt }]
+            }
+          });
+          
+          let imageUrl = '';
+          if (imgResponse.candidates?.[0]?.content?.parts) {
+             for (const part of imgResponse.candidates[0].content.parts) {
+                if (part.inlineData) {
+                   imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+                   break;
+                }
+             }
+          }
+          
+          if (imageUrl) {
+             setAllArticles(prev => prev.map(a => a.id === newArticle.id ? { ...a, thumbnail: imageUrl } : a));
+          }
+        } catch (imgErr) {
+          console.error("이미지 생성 실패 (백그라운드):", imgErr);
+        }
+      })();
+
+    } catch (error: any) {
+      console.error("HandleCreateArticle 에러:", error);
+      alert(`기사 등록 실패: ${error.message}`);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
     <div className="min-h-screen transition-colors duration-300 relative overflow-x-hidden main-layout" style={{ backgroundColor }}>
       
-      {/* 기사 쓰기 슬라이드 패널 (출처, 이미지 스타일 입력란 보존) */}
+      {/* 기사 작성 사이드 패널 */}
       <aside 
         className={`fixed top-0 right-0 h-full w-full max-w-lg shadow-2xl z-[300] transform transition-transform duration-500 ease-in-out p-6 md:p-10 flex flex-col border-l ${borderColor} ${isWritePanelOpen ? 'translate-x-0' : 'translate-x-full'}`} 
         style={{ backgroundColor: paperColor }}
@@ -172,7 +250,7 @@ const HomePage: React.FC<HomePageProps> = ({
             <label className={`text-[11px] font-bold uppercase meta-text ${isDarkMode ? 'text-zinc-300' : 'text-zinc-900'}`}>기사 내용</label>
             <textarea 
               rows={12} 
-              placeholder="기사의 본문 내용을 입력하세요." 
+              placeholder="기사의 핵심 키워드나 짧은 내용을 입력하면 AI가 전문 기사로 재구성합니다." 
               value={writeForm.body} 
               onChange={(e) => setWriteForm({...writeForm, body: e.target.value})} 
               className={`w-full bg-transparent border ${inputBorderColor} p-4 text-sm rounded-lg outline-none focus:border-[#00928e] transition-colors resize-none body-text ${textColor}`} 
@@ -192,14 +270,23 @@ const HomePage: React.FC<HomePageProps> = ({
         </div>
         <button 
           onClick={handleCreateArticle} 
-          className="w-full py-4 mt-6 text-white font-bold text-[13px] rounded-lg shadow-lg hover:brightness-110 active:scale-[0.99] transition-all border-t border-white/20 uppercase tracking-widest" 
-          style={{ backgroundColor: accentColor }}
+          disabled={isGenerating}
+          className={`w-full py-4 mt-6 text-white font-bold text-[13px] rounded-lg shadow-lg hover:brightness-110 active:scale-[0.99] transition-all border-t border-white/20 uppercase tracking-widest flex items-center justify-center gap-2`} 
+          style={{ backgroundColor: accentColor, opacity: isGenerating ? 0.7 : 1 }}
         >
-          기사 등록
+          {isGenerating ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              AI 기사 생성 중...
+            </>
+          ) : "기사 등록"}
         </button>
       </aside>
 
-      {/* 기사 상세 내용 오버레이 (가독성 로직 보존) */}
+      {/* 기사 상세 뷰어 오버레이 */}
       <div 
         className={`fixed inset-0 z-[400] transition-all duration-700 ${viewingArticle ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}
       >
@@ -226,8 +313,17 @@ const HomePage: React.FC<HomePageProps> = ({
                   {viewingArticle.thumbnail && (
                     <figure className="mb-12">
                       <div className="aspect-video overflow-hidden shadow-2xl border border-gray-100 rounded-[12px]">
-                        <img src={viewingArticle.thumbnail} className="w-full h-full object-cover" />
+                        <img 
+                          src={viewingArticle.thumbnail} 
+                          className="w-full h-full object-cover" 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = FALLBACK_NEWS_IMG;
+                          }}
+                        />
                       </div>
+                      <figcaption className="mt-4 text-[11px] font-bold text-zinc-400 italic text-center leading-relaxed">
+                        {viewingArticle.caption || `[사진] ${viewingArticle.title} 관련 기록 이미지`}
+                      </figcaption>
                     </figure>
                   )}
                   <div className={`space-y-8 text-lg md:text-xl body-text leading-[2.0] ${textColor}`}>
@@ -240,7 +336,6 @@ const HomePage: React.FC<HomePageProps> = ({
         </div>
       </div>
 
-      {/* 상단 GNB (중앙 정렬 준수) */}
       <div className={`border-b ${borderColor} py-2 px-4 flex flex-wrap justify-center items-center text-[11px] gap-4 bg-transparent backdrop-blur-md sticky top-0 z-[70] transition-colors w-full`} style={{ backgroundColor: isDarkMode ? 'rgba(31, 43, 58, 0.8)' : 'rgba(255, 255, 255, 0.8)' }}>
         <div className="max-w-[1200px] w-full flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -276,7 +371,7 @@ const HomePage: React.FC<HomePageProps> = ({
           </div>
           <button 
             onClick={() => setIsWritePanelOpen(true)} 
-            className="text-white px-5 py-2 text-xs font-bold rounded-[4px] transition-all ml-4 flex-shrink-0 shadow-lg hover:-translate-y-[2px] active:scale-[0.98] border-t border-white/30 meta-text" 
+            className="text-white px-5 py-2 text-xs font-bold rounded-[4px] transition-all ml-4 flex-shrink-0 shadow-lg hover:-translate-y-[2px] active:scale-[0.98] border-t border-white/20 meta-text" 
             style={{ backgroundColor: accentColor }}
           >
             기사 쓰기
@@ -284,10 +379,8 @@ const HomePage: React.FC<HomePageProps> = ({
         </div>
       </nav>
 
-      {/* 메인 지면 레이아웃 (중앙 정렬 및 정돈된 그리드) */}
       <main className="max-w-[1200px] mx-auto px-4 md:px-10 py-12 min-h-[600px] transition-colors" style={{ backgroundColor }}>
         
-        {/* '인터랙티브' 탭 전용 레이아웃: 와이드 카드 리스트 (16:9 비율 고정) */}
         {selectedCategory === '인터랙티브' ? (
           <div className="space-y-12 animate-in fade-in duration-700">
             <div className="flex items-center gap-4 mb-4">
@@ -302,13 +395,11 @@ const HomePage: React.FC<HomePageProps> = ({
               >
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
                 
-                {/* 이미지 영역: 16:9 비율 유지 (규격 통일) */}
                 <div className="w-full md:w-3/5 relative overflow-hidden aspect-video">
                   <img src={article.thumbnail} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent md:bg-gradient-to-r md:from-black/60 md:to-transparent" />
                 </div>
                 
-                {/* 텍스트 영역: 40% (2/5) */}
                 <div className="w-full md:w-2/5 p-8 md:p-12 flex flex-col justify-center relative z-10">
                   <span className="text-[10px] font-black bg-[#00928e] text-white px-3 py-1 rounded-[4px] uppercase meta-text mb-4 self-start tracking-widest shadow-lg">Deep Interactive</span>
                   <h2 className={`text-xl md:text-3xl headline-text font-black leading-tight mb-4 ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>{article.title}</h2>
@@ -322,9 +413,7 @@ const HomePage: React.FC<HomePageProps> = ({
             ))}
           </div>
         ) : (
-          /* [지시사항 1, 3] 일반 탭 및 HOME 레이아웃 (교차 배치 대응) */
           <div className="animate-in fade-in duration-700">
-            {/* 상단 헤드라인 영역 (HOME 탭 등에서 노출, 첫 번째 기사는 항상 인터랙티브) */}
             {displayedArticles.length > 0 && (
               <div className="mb-16">
                 <div className="flex items-center gap-4 mb-8">
@@ -352,7 +441,6 @@ const HomePage: React.FC<HomePageProps> = ({
               </div>
             )}
 
-            {/* 정돈된 그리드 섹션: 3열 레이아웃 (인터랙티브와 일반 기사 혼합) */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
               {displayedArticles.slice(1).map((article) => (
                 <ArticleCard key={article.id} article={article} onClick={onArticleSelect} isDarkMode={isDarkMode} />
@@ -361,7 +449,6 @@ const HomePage: React.FC<HomePageProps> = ({
           </div>
         )}
 
-        {/* 더 보기 버튼 (Curated List 관리) */}
         {filteredArticles.length > displayLimit && (
           <div className="mt-20 flex justify-center">
             <button 
@@ -394,19 +481,16 @@ const HomePage: React.FC<HomePageProps> = ({
       </footer>
 
       <style>{`
-        /* 사이트 기본 폰트 정책 */
         .main-layout { 
           font-family: 'Noto Sans KR', sans-serif !important; 
         }
         
-        /* 헤드라인(제목) 폰트 정책 */
         .headline-text { 
           font-family: 'Noto Serif KR', serif !important; 
           font-weight: 700 !important;
           letter-spacing: -0.03em !important;
         }
         
-        /* 본문 및 요약 폰트 정책 */
         .body-text { 
           font-family: 'Noto Sans KR', sans-serif !important; 
           font-weight: 400 !important;
@@ -414,7 +498,6 @@ const HomePage: React.FC<HomePageProps> = ({
           letter-spacing: -0.015em !important;
         }
         
-        /* 메타 정보 폰트 정책 */
         .meta-text {
           font-family: 'Noto Sans KR', sans-serif !important;
           font-weight: 700 !important;

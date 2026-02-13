@@ -23,6 +23,17 @@ type Debris3D = {
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 
+const SENTENCES = [
+  "“대부분은 상황을 인식하기도 전에,\n몸의 균형을 잃었습니다.”",
+  "“경고 방송도,\n대피 안내도 없었습니다.”",
+  "“다리가 무너지고 있다는 사실을\n깨닫는 데에도 시간이 필요했습니다.”",
+  "“누군가는 브레이크를 밟았고,\n누군가는 핸들을 잡았습니다.”",
+  "“하지만 선택이라고 부르기에는,\n너무 짧은 순간이었습니다.”",
+  "“사고는 종종\n‘대처하지 못한 결과’로 설명됩니다.”",
+  "“그러나 그날,\n대처할 수 있는 시간은\n주어지지 않았습니다.”",
+  "“10초는,\n무언가를 하기에는\n너무 짧은 시간이었습니다.”"
+];
+
 const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [countdown, setCountdown] = useState(10);
   const [phase, setPhase] = useState<Phase>('countdown');
@@ -42,28 +53,26 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
     }
   }, [countdown, phase]);
 
-  // 2. Article Scroll Tracking
+  // 2. Article Scroll Tracking (IntersectionObserver for reliability)
   useEffect(() => {
     if (phase !== 'article') return;
 
-    const handleScroll = () => {
-      const elements = document.querySelectorAll('.scroll-sentence');
-      let currentIdx = -1;
-      const center = window.innerHeight / 2;
-      
-      elements.forEach((el, idx) => {
-        const rect = el.getBoundingClientRect();
-        if (rect.top <= center && rect.bottom >= center) {
-          currentIdx = idx;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const idx = Number(entry.target.getAttribute('data-index'));
+          setActiveSentence(idx);
         }
       });
-      
-      setActiveSentence(currentIdx);
-    };
+    }, { 
+      threshold: 0.5,
+      rootMargin: "-20% 0px -20% 0px"
+    });
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
+    const elements = document.querySelectorAll('.scroll-sentence');
+    elements.forEach(el => observer.observe(el));
+
+    return () => observer.disconnect();
   }, [phase]);
 
   // 3. Cinematic 3D Debris Generation
@@ -111,24 +120,13 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
     }
   };
 
-  const sentences = [
-    "“대부분은 상황을 인식하기도 전에,\n몸의 균형을 잃었습니다.”",
-    "“경고 방송도,\n대피 안내도 없었습니다.”",
-    "“다리가 무너지고 있다는 사실을\n깨닫는 데에도 시간이 필요했습니다.”",
-    "“누군가는 브레이크를 밟았고,\n누군가는 핸들을 잡았습니다.”",
-    "“하지만 선택이라고 부르기에는,\n너무 짧은 순간이었습니다.”",
-    "“사고는 종종\n‘대처하지 못한 결과’로 설명됩니다.”",
-    "“그러나 그날,\n대처할 수 있는 시간은\n주어지지 않았습니다.”",
-    "“10초는,\n무언가를 하기에는\n너무 짧은 시간이었습니다.”"
-  ];
-
   return (
-    <div className="bg-white min-h-screen relative overflow-x-hidden select-none">
+    <div className="bg-white min-h-screen relative overflow-x-hidden select-none font-sans">
       {/* Back Button */}
       <div className="fixed top-8 left-8 z-[1000]">
         <button 
           onClick={onBack} 
-          className="flex items-center gap-3 text-[10px] font-black tracking-[0.4em] text-zinc-400 uppercase hover:text-zinc-900 transition-colors"
+          className={`flex items-center gap-3 text-[10px] font-black tracking-[0.4em] uppercase transition-colors ${phase === 'article' ? 'text-zinc-400 hover:text-zinc-900' : 'text-white/50 hover:text-white'}`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fillRule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/></svg>
           BACK TO NEWSPAPER
@@ -142,28 +140,9 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
             <div 
               key={countdown}
               className="text-[18rem] md:text-[28rem] font-black tabular-nums tracking-tighter text-white animate-digit-3d"
-              style={{ 
-                textShadow: `
-                  0 1px 0 #ccc, 
-                  0 2px 0 #c9c9c9, 
-                  0 3px 0 #bbb, 
-                  0 4px 0 #b9b9b9, 
-                  0 5px 0 #aaa, 
-                  0 6px 1px rgba(0,0,0,.1), 
-                  0 0 5px rgba(0,0,0,.1), 
-                  0 1px 3px rgba(0,0,0,.3), 
-                  0 3px 5px rgba(0,0,0,.2), 
-                  0 5px 10px rgba(0,0,0,.25), 
-                  0 10px 10px rgba(0,0,0,.2), 
-                  0 20px 20px rgba(0,0,0,.15)
-                `
-              }}
             >
               {countdown}
             </div>
-            {/* 3D Reflection/Shadow glitch */}
-            <div className="absolute inset-0 text-red-600/10 blur-xl scale-110 -z-10 animate-pulse">{countdown}</div>
-            
             <p className="absolute -bottom-16 left-1/2 -translate-x-1/2 w-full text-center text-[10px] font-black tracking-[1em] text-white/10 uppercase">
               STRUCTURAL STABILITY: CRITICAL
             </p>
@@ -176,10 +155,6 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
         <div 
           className={`fixed inset-0 z-[200] bg-[#050505] overflow-hidden scene-3d transition-opacity duration-[1200ms] ${isBlackout ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
         >
-          {/* Lighting Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-transparent pointer-events-none z-50" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.05)_0%,transparent_70%)] pointer-events-none z-50" />
-
           <div className="transform-3d w-full h-full relative">
             {debrisList.map((d, i) => (
               <div
@@ -205,30 +180,15 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
                   animation: `debris-fall-3d var(--dur) cubic-bezier(0.55, 0.055, 0.675, 0.19) var(--delay) forwards`
                 } as React.CSSProperties}
               >
-                {/* 3D Cube Faces */}
-                <div className="cube-face front" style={{ backgroundColor: d.color, transform: `translateZ(${d.size.d / 2}px)` }}>
-                  {d.kind === 'rebar' && <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-transparent" />}
-                </div>
+                <div className="cube-face front" style={{ backgroundColor: d.color, transform: `translateZ(${d.size.d / 2}px)` }} />
                 <div className="cube-face back" style={{ backgroundColor: d.color, transform: `rotateY(180deg) translateZ(${d.size.d / 2}px)` }} />
-                <div className="cube-face right" style={{ backgroundColor: d.color, width: `${d.size.d}px`, transform: `rotateY(90deg) translateZ(${d.size.w - d.size.d / 2}px)` }}>
-                  <div className="absolute inset-0 bg-black/40" />
-                </div>
-                <div className="cube-face left" style={{ backgroundColor: d.color, width: `${d.size.d}px`, transform: `rotateY(-90deg) translateZ(${d.size.d / 2}px)` }}>
-                  <div className="absolute inset-0 bg-black/20" />
-                </div>
-                <div className="cube-face top" style={{ backgroundColor: d.color, height: `${d.size.d}px`, transform: `rotateX(90deg) translateZ(${d.size.d / 2}px)` }}>
-                  <div className="absolute inset-0 bg-white/10" />
-                </div>
-                <div className="cube-face bottom" style={{ backgroundColor: d.color, height: `${d.size.d}px`, transform: `rotateX(-90deg) translateZ(${d.size.h - d.size.d / 2}px)` }}>
-                  <div className="absolute inset-0 bg-black/60" />
-                </div>
-
-                {/* Particle / Dust trail simulation */}
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-full bg-white/5 blur-3xl rounded-full scale-150 animate-dust-trail" />
+                <div className="cube-face right" style={{ backgroundColor: d.color, width: `${d.size.d}px`, transform: `rotateY(90deg) translateZ(${d.size.w - d.size.d / 2}px)` }} />
+                <div className="cube-face left" style={{ backgroundColor: d.color, width: `${d.size.d}px`, transform: `rotateY(-90deg) translateZ(${d.size.d / 2}px)` }} />
+                <div className="cube-face top" style={{ backgroundColor: d.color, height: `${d.size.d}px`, transform: `rotateX(90deg) translateZ(${d.size.d / 2}px)` }} />
+                <div className="cube-face bottom" style={{ backgroundColor: d.color, height: `${d.size.d}px`, transform: `rotateX(-90deg) translateZ(${d.size.h - d.size.d / 2}px)` }} />
               </div>
             ))}
           </div>
-
           <div className="absolute inset-x-0 bottom-24 z-[100] text-center pointer-events-none px-6">
             <h2 className="text-white text-2xl md:text-5xl font-black tracking-[-0.05em] opacity-0 animate-impact-reveal italic font-serif">
               그날, 10초는 누구에게나 똑같이 흘렀습니다.
@@ -238,8 +198,9 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
       )}
 
       {/* Phase: Article Content */}
-      <div className={phase === 'article' ? 'opacity-100' : 'opacity-0 pointer-events-none'}>
-        <section className={`h-screen flex flex-col items-center justify-center px-6 text-center bg-white sticky top-0 z-0 transition-opacity duration-1000 ${activeSentence >= 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <div className={phase === 'article' ? 'opacity-100 relative z-10' : 'opacity-0 pointer-events-none fixed inset-0'}>
+        {/* Title Section - Sticky Top */}
+        <section className={`h-screen flex flex-col items-center justify-center px-6 text-center bg-white sticky top-0 transition-opacity duration-700 ${activeSentence >= 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <div className="space-y-14 animate-in fade-in slide-in-from-bottom-8 duration-1000">
             <div className="space-y-4">
               <span className="text-[10px] font-black text-[#D32F2F] tracking-[0.6em] uppercase">October 21, 1994 / 07:40 AM</span>
@@ -247,9 +208,6 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
                 1994년 10월 21일 07:40,<br/>멈춰버린 시간
               </h1>
             </div>
-            <p className="text-xl md:text-2xl font-medium text-zinc-500 max-w-2xl mx-auto leading-relaxed font-serif">
-              “성수대교가 무너지는 데 걸린 시간은,<br className="hidden md:block"/>단 10초였습니다.”
-            </p>
             <div className="pt-20">
               <div className="w-[1px] h-24 bg-gradient-to-b from-zinc-900 to-transparent mx-auto animate-scroll-indicator" />
               <p className="mt-6 text-[9px] font-black text-zinc-300 tracking-[0.5em] uppercase">Scroll to Witness</p>
@@ -257,16 +215,25 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
           </div>
         </section>
 
-        <div className="relative z-10 bg-white shadow-[0_-50px_100px_rgba(255,255,255,1)]">
-          {sentences.map((text, idx) => (
-            <div key={idx} className="scroll-sentence h-[100vh] flex flex-col items-center justify-center px-8">
-              <p className={`text-2xl md:text-5xl font-black text-zinc-900 text-center leading-[1.6] transition-all duration-700 whitespace-pre-line font-serif ${activeSentence === idx ? 'opacity-100 translate-y-0 scale-100 blur-0' : 'opacity-0 translate-y-20 blur-xl scale-95 invisible'}`}>
-                {text}
-              </p>
+        {/* Scrolling Sentences Container - Overlays the title */}
+        <div className="relative z-20">
+          {SENTENCES.map((text, idx) => (
+            <div key={idx} data-index={idx} className="scroll-sentence h-[80vh] flex flex-col items-center justify-center px-8 bg-white/90 backdrop-blur-sm snap-center border-t border-transparent">
+              <div 
+                className={`transition-all duration-1000 ease-out transform max-w-4xl text-center ${
+                  activeSentence === idx 
+                    ? 'opacity-100 translate-y-0 scale-100 blur-0' 
+                    : 'opacity-0 translate-y-12 scale-95 blur-sm'
+                }`}
+              >
+                <p className="text-3xl md:text-5xl font-black text-zinc-900 leading-tight font-serif whitespace-pre-line drop-shadow-sm">
+                  {text}
+                </p>
+              </div>
             </div>
           ))}
           
-          <div className="h-[50vh] flex flex-col items-center justify-center text-center px-8 bg-zinc-50 border-t border-zinc-100">
+          <div className="h-[50vh] flex flex-col items-center justify-center text-center px-8 bg-white border-t border-zinc-100">
             <div className="max-w-xl space-y-10 py-20">
               <div className="h-px w-12 bg-zinc-300 mx-auto" />
               <p className="text-sm font-serif text-zinc-400 italic leading-relaxed uppercase tracking-widest opacity-60">
@@ -284,75 +251,28 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
       </div>
 
       <style>{`
-        .scene-3d {
-          perspective: 2000px;
-          perspective-origin: 50% 50%;
-        }
-        .transform-3d {
-          transform-style: preserve-3d;
-        }
-
-        .debris-3d-box {
-          position: absolute;
-          transform-style: preserve-3d;
-          will-change: transform, opacity;
-        }
-
-        .cube-face {
-          position: absolute;
-          width: 100%;
-          height: 100%;
-          backface-visibility: visible;
-          border: 1px solid rgba(255,255,255,0.02);
-        }
-
+        .scene-3d { perspective: 2000px; perspective-origin: 50% 50%; }
+        .transform-3d { transform-style: preserve-3d; }
+        .debris-3d-box { position: absolute; transform-style: preserve-3d; will-change: transform, opacity; }
+        .cube-face { position: absolute; width: 100%; height: 100%; backface-visibility: visible; border: 1px solid rgba(255,255,255,0.02); }
         @keyframes debris-fall-3d {
-          0% {
-            transform: translateZ(var(--zStart)) translateY(0) rotateX(var(--rotX)) rotateY(var(--rotY)) rotateZ(var(--rotZ));
-            opacity: 0;
-          }
+          0% { transform: translateZ(var(--zStart)) translateY(0) rotateX(var(--rotX)) rotateY(var(--rotY)) rotateZ(var(--rotZ)); opacity: 0; }
           10% { opacity: 1; }
-          100% {
-            transform: translateZ(var(--zEnd)) translateY(180vh) rotateX(calc(var(--rotX) + var(--rotSpeedX))) rotateY(calc(var(--rotY) + var(--rotSpeedY))) rotateZ(calc(var(--rotZ) + var(--rotSpeedZ)));
-            opacity: 1;
-          }
+          100% { transform: translateZ(var(--zEnd)) translateY(180vh) rotateX(calc(var(--rotX) + var(--rotSpeedX))) rotateY(calc(var(--rotY) + var(--rotSpeedY))) rotateZ(calc(var(--rotZ) + var(--rotSpeedZ))); opacity: 1; }
         }
-
         @keyframes digit-3d {
-          0% { 
-            transform: scale(0.5) translateZ(-1000px) rotateY(-90deg); 
-            opacity: 0; 
-            filter: blur(20px);
-          }
+          0% { transform: scale(0.5) translateZ(-1000px) rotateY(-90deg); opacity: 0; filter: blur(20px); }
           20% { opacity: 1; filter: blur(0); }
-          100% { 
-            transform: scale(1) translateZ(0) rotateY(0deg); 
-            opacity: 1; 
-          }
+          100% { transform: scale(1) translateZ(0) rotateY(0deg); opacity: 1; }
         }
-        .animate-digit-3d {
-          animation: digit-3d 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-        }
-
+        .animate-digit-3d { animation: digit-3d 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
         @keyframes impact-reveal {
           0% { opacity: 0; transform: translateY(30px); filter: blur(20px); }
           20% { opacity: 1; transform: translateY(0); filter: blur(0); }
           80% { opacity: 1; transform: translateY(0); filter: blur(0); }
           100% { opacity: 0; transform: translateY(-20px); filter: blur(10px); }
         }
-        .animate-impact-reveal {
-          animation: impact-reveal 3.5s cubic-bezier(0.19, 1, 0.22, 1) forwards;
-        }
-
-        @keyframes dust-trail {
-          0% { opacity: 0; transform: scale(0.5) translateZ(-50px); }
-          50% { opacity: 0.1; }
-          100% { opacity: 0; transform: scale(2) translateZ(50px); }
-        }
-        .animate-dust-trail {
-          animation: dust-trail 1s infinite linear;
-        }
-
+        .animate-impact-reveal { animation: impact-reveal 3.5s cubic-bezier(0.19, 1, 0.22, 1) forwards; }
         @keyframes scroll-indicator {
           0% { transform: scaleY(0); transform-origin: top; }
           50% { transform: scaleY(1); transform-origin: top; }
@@ -360,7 +280,6 @@ const SeongsuBridgeExperience: React.FC<{ onBack: () => void }> = ({ onBack }) =
           100% { transform: scaleY(0); transform-origin: bottom; }
         }
         .animate-scroll-indicator { animation: scroll-indicator 2.5s infinite cubic-bezier(0.77, 0, 0.175, 1); }
-
         .font-serif { font-family: 'Nanum Myeongjo', serif; }
       `}</style>
     </div>
